@@ -18,13 +18,15 @@ export default function ImageCard({
   onCityClick,
   onToggleFav,
   isFavorite,
+  cityForWeather, 
 }: {
   photo: Photo;
   onCityClick: (city: string) => void;
   onToggleFav: (photo: Photo) => void;
   isFavorite: boolean;
+  cityForWeather?: string;
 }) {
-  const city = photo.location || '';
+  const city = (cityForWeather ?? '').trim();
 
   return (
     <motion.div
@@ -48,11 +50,11 @@ export default function ImageCard({
       <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
       {/* top-right save */}
-      <div className="absolute right-3 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute right-3 top-2 opacity-0 transition-opacity group-hover:opacity-100">
         <FavButton active={isFavorite} onClick={() => onToggleFav(photo)} />
       </div>
 
-      {/* credits + action */}
+      {/* credits + actions */}
       <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-white text-sm">
         <div className="truncate">
           {photo.author && (
@@ -66,9 +68,12 @@ export default function ImageCard({
               {photo.author}
             </a>
           )}
-          {city && <span className="ml-2 opacity-90">• {city}</span>}
+          {(photo.location || city) && (
+            <span className="ml-2 opacity-90">• {photo.location || city}</span>
+          )}
         </div>
 
+        {/* Always show if we have a city candidate */}
         {city && (
           <button
             onClick={() => onCityClick(city)}
@@ -81,3 +86,4 @@ export default function ImageCard({
     </motion.div>
   );
 }
+

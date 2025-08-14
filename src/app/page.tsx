@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import ImageCard from '@/components/ImageCard';
 import FavoritesPanel from '@/components/FavoritesPanel';
 import SkeletonCard from '@/components/SkeletonCard';
@@ -10,7 +11,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 type Photo = FavPhoto;
 
 export default function HomePage() {
-  const [query, setQuery] = useState('kyoto');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [gridKey, setGridKey] = useState(0);
+
+  // derive initial state from URL
+  const initialQ = (searchParams.get('q') || 'kyoto').trim();
+  const initialPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+
+  const [query, setQuery] = useState(initialQ);
+  const [page, setPage] = useState(initialPage);
+  const [totalPages, setTotalPages] = useState<number | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -24,19 +37,58 @@ export default function HomePage() {
 
   const canSearch = useMemo(() => query.trim().length > 0, [query]);
 
-  async function fetchPhotos(q: string) {
+  // helper: update URL (q + page) without scrolling/jumping
+  function syncUrl(nextQ: string, nextPage: number) {
+    const sp = new URLSearchParams(Array.from(searchParams.entries()));
+    sp.set('q', nextQ);
+    sp.set('page', String(nextPage));
+    router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
+  }
+
+  async function fetchPhotos(q: string, pg: number, append = false) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/unsplash?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/unsplash?q=${encodeURIComponent(q)}&page=${pg}`);
       if (!res.ok) throw new Error('Failed to load photos');
       const json = await res.json();
-      setPhotos(json.results || []);
+      setTotalPages(json.totalPages ?? null);
+      setPhotos(prev => (append ? [...prev, ...(json.results || [])] : (json.results || [])));
     } catch (e: any) {
       setError(e.message || 'Error');
     } finally {
       setLoading(false);
     }
+  }
+
+  // function handleSearchSubmit(e: React.FormEvent) {
+  //   e.preventDefault();
+  //   if (!canSearch) return;
+  //   setPage(1);
+  //   syncUrl(query, 1);
+  //   fetchPhotos(query, 1, false);
+  // }
+
+  function handleSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSearch) return;
+
+    // FULL reset
+    setPage(1);
+    setTotalPages(null);
+    setPhotos([]);        // clear current photos so skeletons show
+    setGridKey((k) => k + 1); // force remount of the grid container
+
+    syncUrl(query, 1);
+    fetchPhotos(query, 1, false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function handleLoadMore() {
+    const next = page + 1;
+    setPage(next);
+    syncUrl(query, next);
+    await fetchPhotos(query, next, true);
   }
 
   async function openWeather(city: string) {
@@ -53,7 +105,17 @@ export default function HomePage() {
     }
   }
 
-  useEffect(() => { fetchPhotos(query); }, []);
+  // initial load or URL change (back/forward)
+  useEffect(() => {
+    const urlQ = (searchParams.get('q') || 'kyoto').trim();
+    const urlPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+
+    setQuery(urlQ);
+    setPage(urlPage);
+    // fresh fetch (not append) to reflect URL
+    fetchPhotos(urlQ, urlPage, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]); // listen to URL changes
 
   return (
     <main className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
@@ -75,10 +137,7 @@ export default function HomePage() {
         </div>
 
         {/* Search */}
-        <form
-          onSubmit={(e) => { e.preventDefault(); if (canSearch) fetchPhotos(query); }}
-          className="mt-6 flex items-center gap-2"
-        >
+        <form onSubmit={handleSearchSubmit} className="mt-6 flex items-center gap-2">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -97,18 +156,36 @@ export default function HomePage() {
         {error && <p className="mt-3 text-red-600">{error}</p>}
 
         {/* Grid */}
-        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {loading
+        <div key={gridKey} className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {loading && photos.length === 0
             ? Array.from({ length: 9 }).map((_, i) => <SkeletonCard key={i} />)
             : photos.map((p) => (
                 <ImageCard
                   key={p.id}
                   photo={p}
                   onCityClick={openWeather}
-                  onToggleFav={toggleFav}
+                  onToggleFav={(ph) => toggleFav(ph)}
                   isFavorite={isFav(p.id)}
+                  cityForWeather={p.location || query} 
                 />
               ))}
+        </div>
+
+        {/* Load more */}
+        <div className="mt-8 flex justify-center">
+          {totalPages && page < totalPages ? (
+            <button
+              onClick={handleLoadMore}
+              disabled={loading}
+              className="rounded-lg border border-neutral-300 bg-white px-4 py-2 font-semibold hover:bg-neutral-50 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+            >
+              {loading ? 'Loading…' : 'Load more'}
+            </button>
+          ) : (
+            photos.length > 0 && (
+              <span className="text-sm text-neutral-500">No more results.</span>
+            )
+          )}
         </div>
 
         {/* Weather Backdrop */}
