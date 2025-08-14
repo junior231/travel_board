@@ -1,6 +1,6 @@
 # Travel Inspiration Board
 
-Search destinations, explore stunning photos from Unsplash, and peek at local weather—all in one clean Next.js app. Server-side API calls (no CORS or leaked keys), favorites with local persistence, “Load more” pagination, and shareable URL state (`?q=kyoto&page=2`).
+Search destinations, explore stunning photos from Unsplash, and peek at local weather—all in one clean Next.js app.
 
 ## 🚀 Features
 - 🔎 **Unsplash search** with server-side fetching
