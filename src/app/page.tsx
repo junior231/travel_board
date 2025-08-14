@@ -1,103 +1,161 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useEffect, useMemo, useState } from 'react';
+import ImageCard from '@/components/ImageCard';
+import { motion, AnimatePresence } from 'framer-motion';
+
+type Photo = {
+  id: string;
+  src: string;
+  alt: string;
+  author?: string;
+  authorLink?: string;
+  location?: string | null;
+};
+
+export default function HomePage() {
+  const [query, setQuery] = useState('kyoto');
+  const [loading, setLoading] = useState(false);
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const [weatherOpen, setWeatherOpen] = useState(false);
+  const [weatherCity, setWeatherCity] = useState<string>('');
+  const [weather, setWeather] = useState<{ name: string; temp: number; desc: string; icon?: string } | null>(null);
+
+  const canSearch = useMemo(() => query.trim().length > 0, [query]);
+
+  async function fetchPhotos(q: string) {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/unsplash?q=${encodeURIComponent(q)}`);
+      if (!res.ok) throw new Error('Failed to load photos');
+      const json = await res.json();
+      setPhotos(json.results || []);
+    } catch (e: any) {
+      setError(e.message || 'Error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openWeather(city: string) {
+    setWeatherOpen(true);
+    setWeather(null);
+    setWeatherCity(city);
+    try {
+      const res = await fetch(`/api/weather?city=${encodeURIComponent(city)}`);
+      if (!res.ok) throw new Error('Weather error');
+      const json = await res.json();
+      setWeather(json.data);
+    } catch {
+      setWeather({ name: city, temp: NaN, desc: 'Unavailable' });
+    }
+  }
+
+  useEffect(() => {
+    fetchPhotos(query);
+  }, []);
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+      <section className="mx-auto max-w-5xl px-4 py-10">
+        <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">Travel Inspiration Board</h1>
+        <p className="mt-1 text-neutral-600 dark:text-neutral-300">
+          Search destinations, explore stunning photos (Unsplash), and peek at the local weather.
+        </p>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSearch) fetchPhotos(query);
+          }}
+          className="mt-6 flex items-center gap-2"
+        >
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Try: Kyoto, Santorini, Marrakech…"
+            className="flex-1 rounded-lg border border-neutral-300 bg-white/70 px-3 py-3 outline-none focus:ring-2 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900"
+          />
+          <button
+            type="submit"
+            disabled={!canSearch || loading}
+            className="rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-50"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            {loading ? 'Searching…' : 'Search'}
+          </button>
+        </form>
+
+        {error && <p className="mt-3 text-red-600">{error}</p>}
+
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {photos.map((p) => (
+            <ImageCard key={p.id} photo={p} onCityClick={openWeather} />
+          ))}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {/* Backdrop */}
+        <AnimatePresence>
+          {weatherOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-black/50"
+              onClick={() => setWeatherOpen(false)}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Drawer */}
+        <AnimatePresence>
+          {weatherOpen && (
+            <motion.aside
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.25 }}
+              className="fixed right-0 top-0 bottom-0 z-50 w-[320px] border-l bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900 sm:w-[380px]"
+            >
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold">Weather — {weatherCity}</h2>
+                <button
+                  onClick={() => setWeatherOpen(false)}
+                  className="rounded bg-neutral-200 px-2 py-1 dark:bg-neutral-800"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-6">
+                {!weather && <p>Loading…</p>}
+                {weather && (
+                  <div>
+                    <div className="text-4xl font-extrabold">
+                      {isNaN(weather.temp) ? '—' : `${weather.temp}°C`}
+                    </div>
+                    <div className="capitalize text-neutral-600 dark:text-neutral-300">
+                      {weather.desc}
+                    </div>
+                    {weather.icon && (
+                      <img
+                        alt={weather.desc || 'Weather'}
+                        className="mt-4"
+                        src={`https://openweathermap.org/img/wn/${weather.icon}@2x.png`}
+                      />
+                    )}
+                    <p className="mt-8 text-xs text-neutral-500">
+                      Data by OpenWeather • Photos by Unsplash (credit per image)
+                    </p>
+                  </div>
+                )}
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+      </section>
+    </main>
   );
 }
