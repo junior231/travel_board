@@ -34,6 +34,7 @@ npm install
 
 # 3) Run dev
 npm run dev
+```
 
 ## 👤 Author
 Collins Ilo
