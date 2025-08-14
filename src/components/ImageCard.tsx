@@ -1,7 +1,8 @@
-"use client";
+'use client';
 
-import Image from "next/image";
-import { motion } from "framer-motion";
+import Image from 'next/image';
+import { motion } from 'framer-motion';
+import FavButton from './FavButton';
 
 type Photo = {
   id: string;
@@ -15,11 +16,15 @@ type Photo = {
 export default function ImageCard({
   photo,
   onCityClick,
+  onToggleFav,
+  isFavorite,
 }: {
   photo: Photo;
   onCityClick: (city: string) => void;
+  onToggleFav: (photo: Photo) => void;
+  isFavorite: boolean;
 }) {
-  const city = photo.location || "";
+  const city = photo.location || '';
 
   return (
     <motion.div
@@ -42,12 +47,17 @@ export default function ImageCard({
       {/* hover tint */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
+      {/* top-right save */}
+      <div className="absolute right-3 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <FavButton active={isFavorite} onClick={() => onToggleFav(photo)} />
+      </div>
+
       {/* credits + action */}
       <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-white text-sm">
         <div className="truncate">
           {photo.author && (
             <a
-              href={photo.authorLink ?? "#"}
+              href={photo.authorLink ?? '#'}
               target="_blank"
               rel="noreferrer"
               className="underline decoration-white/40 underline-offset-2 hover:decoration-white"

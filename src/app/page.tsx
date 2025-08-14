@@ -2,16 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import ImageCard from '@/components/ImageCard';
+import FavoritesPanel from '@/components/FavoritesPanel';
+import SkeletonCard from '@/components/SkeletonCard';
+import useFavorites, { FavPhoto } from '@/hooks/useFavorites';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type Photo = {
-  id: string;
-  src: string;
-  alt: string;
-  author?: string;
-  authorLink?: string;
-  location?: string | null;
-};
+type Photo = FavPhoto;
 
 export default function HomePage() {
   const [query, setQuery] = useState('kyoto');
@@ -22,6 +18,9 @@ export default function HomePage() {
   const [weatherOpen, setWeatherOpen] = useState(false);
   const [weatherCity, setWeatherCity] = useState<string>('');
   const [weather, setWeather] = useState<{ name: string; temp: number; desc: string; icon?: string } | null>(null);
+
+  const [favOpen, setFavOpen] = useState(false);
+  const { list: favs, toggle: toggleFav, isFav, remove } = useFavorites();
 
   const canSearch = useMemo(() => query.trim().length > 0, [query]);
 
@@ -54,23 +53,30 @@ export default function HomePage() {
     }
   }
 
-  useEffect(() => {
-    fetchPhotos(query);
-  }, []);
+  useEffect(() => { fetchPhotos(query); }, []);
 
   return (
     <main className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <section className="mx-auto max-w-5xl px-4 py-10">
-        <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">Travel Inspiration Board</h1>
-        <p className="mt-1 text-neutral-600 dark:text-neutral-300">
-          Search destinations, explore stunning photos (Unsplash), and peek at the local weather.
-        </p>
+        {/* Header row */}
+        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">Travel Inspiration Board</h1>
+            <p className="mt-1 text-neutral-600 dark:text-neutral-300">
+              Search destinations, explore stunning photos, and peek at the local weather.
+            </p>
+          </div>
+          <button
+            onClick={() => setFavOpen(true)}
+            className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-semibold hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+          >
+            Favorites ({favs.length})
+          </button>
+        </div>
 
+        {/* Search */}
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (canSearch) fetchPhotos(query);
-          }}
+          onSubmit={(e) => { e.preventDefault(); if (canSearch) fetchPhotos(query); }}
           className="mt-6 flex items-center gap-2"
         >
           <input
@@ -90,41 +96,43 @@ export default function HomePage() {
 
         {error && <p className="mt-3 text-red-600">{error}</p>}
 
+        {/* Grid */}
         <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {photos.map((p) => (
-            <ImageCard key={p.id} photo={p} onCityClick={openWeather} />
-          ))}
+          {loading
+            ? Array.from({ length: 9 }).map((_, i) => <SkeletonCard key={i} />)
+            : photos.map((p) => (
+                <ImageCard
+                  key={p.id}
+                  photo={p}
+                  onCityClick={openWeather}
+                  onToggleFav={toggleFav}
+                  isFavorite={isFav(p.id)}
+                />
+              ))}
         </div>
 
-        {/* Backdrop */}
+        {/* Weather Backdrop */}
         <AnimatePresence>
           {weatherOpen && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="fixed inset-0 z-40 bg-black/50"
               onClick={() => setWeatherOpen(false)}
             />
           )}
         </AnimatePresence>
 
-        {/* Drawer */}
+        {/* Weather Drawer */}
         <AnimatePresence>
           {weatherOpen && (
             <motion.aside
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'tween', duration: 0.25 }}
               className="fixed right-0 top-0 bottom-0 z-50 w-[320px] border-l bg-white p-5 dark:border-neutral-800 dark:bg-neutral-900 sm:w-[380px]"
             >
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold">Weather — {weatherCity}</h2>
-                <button
-                  onClick={() => setWeatherOpen(false)}
-                  className="rounded bg-neutral-200 px-2 py-1 dark:bg-neutral-800"
-                >
+                <button onClick={() => setWeatherOpen(false)} className="rounded bg-neutral-200 px-2 py-1 dark:bg-neutral-800">
                   Close
                 </button>
               </div>
@@ -133,16 +141,11 @@ export default function HomePage() {
                 {!weather && <p>Loading…</p>}
                 {weather && (
                   <div>
-                    <div className="text-4xl font-extrabold">
-                      {isNaN(weather.temp) ? '—' : `${weather.temp}°C`}
-                    </div>
-                    <div className="capitalize text-neutral-600 dark:text-neutral-300">
-                      {weather.desc}
-                    </div>
+                    <div className="text-4xl font-extrabold">{isNaN(weather.temp) ? '—' : `${weather.temp}°C`}</div>
+                    <div className="capitalize text-neutral-600 dark:text-neutral-300">{weather.desc}</div>
                     {weather.icon && (
                       <img
-                        alt={weather.desc || 'Weather'}
-                        className="mt-4"
+                        alt={weather.desc || 'Weather'} className="mt-4"
                         src={`https://openweathermap.org/img/wn/${weather.icon}@2x.png`}
                       />
                     )}
@@ -155,6 +158,9 @@ export default function HomePage() {
             </motion.aside>
           )}
         </AnimatePresence>
+
+        {/* Favorites Panel */}
+        <FavoritesPanel open={favOpen} onClose={() => setFavOpen(false)} list={favs} onRemove={remove} />
       </section>
     </main>
   );
