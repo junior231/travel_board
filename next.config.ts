@@ -1,14 +1,24 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  // allow unsplash images
-   images: {
-    domains: ['images.unsplash.com'],
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
     remotePatterns: [
-      { protocol: 'https', hostname: 'images.unsplash.com' },
-      { protocol: 'https', hostname: 'plus.unsplash.com' },
+      {
+        protocol: 'https',
+        hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'plus.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'openweathermap.org',
+      },
     ],
   },
+
+  // Optional: if you want to force deployment even with lint errors
+  // eslint: { ignoreDuringBuilds: true },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
