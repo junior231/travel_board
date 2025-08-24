@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import ImageCard from '@/components/ImageCard';
@@ -13,6 +13,12 @@ type Photo = FavPhoto;
 type WeatherData = { name: string; temp: number; desc: string; icon?: string };
 type Weather = WeatherData | null;
 
+type UnsplashResponse = {
+  results: Photo[];
+  total?: number;
+  totalPages?: number;
+};
+
 export default function HomePage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -22,31 +28,35 @@ export default function HomePage() {
   const initialQ = (searchParams.get('q') || 'kyoto').trim();
   const initialPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
-  const [query, setQuery] = useState(initialQ);
-  const [page, setPage] = useState(initialPage);
+  const [query, setQuery] = useState<string>(initialQ);
+  const [page, setPage] = useState<number>(initialPage);
   const [totalPages, setTotalPages] = useState<number | null>(null);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const [weatherOpen, setWeatherOpen] = useState(false);
+  const [weatherOpen, setWeatherOpen] = useState<boolean>(false);
   const [weatherCity, setWeatherCity] = useState<string>('');
   const [weather, setWeather] = useState<Weather>(null);
 
-  const [favOpen, setFavOpen] = useState(false);
+  const [favOpen, setFavOpen] = useState<boolean>(false);
   const { list: favs, toggle: toggleFav, isFav, remove } = useFavorites();
 
-  // forces a remount of the grid to avoid stale UI when starting a new search
-  const [gridKey, setGridKey] = useState(0);
+  // force remount of grid on new searches (to avoid stale UI)
+  const [gridKey, setGridKey] = useState<number>(0);
+
+  // Track seen IDs to avoid duplicate keys on append
+  const idsRef = useRef<Set<string>>(new Set());
+  const prevQ = useRef<string>(query);
+  const prevPage = useRef<number>(page);
 
   const canSearch = useMemo(() => query.trim().length > 0, [query]);
 
-  function errorMsg(e: unknown, fallback = 'Error'): string {
-    return e instanceof Error ? e.message : fallback;
-  }
+  const errorMsg = (e: unknown, fallback = 'Error'): string =>
+    e instanceof Error ? e.message : fallback;
 
-  // update URL (q + page) without scrolling/jumping
+  // Update URL (q + page) without scroll jump
   function syncUrl(nextQ: string, nextPage: number) {
     const sp = new URLSearchParams(Array.from(searchParams.entries()));
     sp.set('q', nextQ);
@@ -54,15 +64,36 @@ export default function HomePage() {
     router.replace(`${pathname}?${sp.toString()}`, { scroll: false });
   }
 
-  async function fetchPhotos(q: string, pg: number, append = false) {
+  // Fetch photos; de-dupe when appending
+  async function fetchPhotos(q: string, pg: number, append = false): Promise<void> {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/unsplash?q=${encodeURIComponent(q)}&page=${pg}`);
       if (!res.ok) throw new Error('Failed to load photos');
-      const json: { results: Photo[]; total?: number; totalPages?: number } = await res.json();
+      const json = (await res.json()) as UnsplashResponse;
+
       setTotalPages(json.totalPages ?? null);
-      setPhotos(prev => (append ? [...prev, ...(json.results || [])] : (json.results || [])));
+      const incoming = json.results ?? [];
+
+      setPhotos((prev) => {
+        if (!append) {
+          // Fresh set: reset ID set
+          idsRef.current = new Set(incoming.map((p) => p.id));
+          return incoming;
+        }
+        // Append with de-dupe by id
+        const set = idsRef.current;
+        const merged = [...prev];
+        for (const ph of incoming) {
+          if (!set.has(ph.id)) {
+            set.add(ph.id);
+            merged.push(ph);
+          }
+        }
+        idsRef.current = set;
+        return merged;
+      });
     } catch (e: unknown) {
       setError(errorMsg(e, 'Error'));
     } finally {
@@ -70,26 +101,25 @@ export default function HomePage() {
     }
   }
 
-  function handleSearchSubmit(e: React.FormEvent) {
+  // Submit: reset state and let URL change trigger fetch
+  function handleSearchSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!canSearch) return;
 
-    // FULL reset for a fresh query
     setPage(1);
     setTotalPages(null);
     setPhotos([]);
-    setGridKey(k => k + 1);
+    idsRef.current.clear();
+    setGridKey((k) => k + 1);
 
     syncUrl(query, 1);
-    fetchPhotos(query, 1, false);
     // optional: window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function handleLoadMore() {
+  // Load more: just bump page via URL; effect will append
+  function handleLoadMore() {
     const next = page + 1;
-    setPage(next);
     syncUrl(query, next);
-    await fetchPhotos(query, next, true);
   }
 
   async function openWeather(city: string) {
@@ -99,24 +129,30 @@ export default function HomePage() {
     try {
       const res = await fetch(`/api/weather?city=${encodeURIComponent(city)}`);
       if (!res.ok) throw new Error('Weather error');
-      const json: { data: WeatherData } = await res.json();
+      const json = (await res.json()) as { data: WeatherData };
       setWeather(json.data);
-    } catch {
+    } catch (_e: unknown) {
       setWeather({ name: city, temp: NaN, desc: 'Unavailable' });
     }
   }
 
-  // initial load and respond to URL changes (back/forward)
+  // Initial load and respond to URL changes (back/forward or programmatic)
   useEffect(() => {
     const urlQ = (searchParams.get('q') || 'kyoto').trim();
     const urlPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
+    // Decide whether to append or replace
+    const append = prevQ.current === urlQ && urlPage > prevPage.current;
+
     setQuery(urlQ);
     setPage(urlPage);
-    // fresh fetch (not append) to reflect URL
-    fetchPhotos(urlQ, urlPage, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+
+    void fetchPhotos(urlQ, urlPage, append);
+
+    prevQ.current = urlQ;
+    prevPage.current = urlPage;
+    // NOTE: no eslint-disable; URL is our single source of truth
+  }, [searchParams]); // eslint is fine: we intentionally depend on searchParams
 
   return (
     <main className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
