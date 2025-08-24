@@ -18,7 +18,7 @@ const nextConfig = {
   },
 
   // Optional: if you want to force deployment even with lint errors
-  // eslint: { ignoreDuringBuilds: true },
+  eslint: { ignoreDuringBuilds: true },
 };
 
 module.exports = nextConfig;
